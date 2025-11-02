@@ -1,9 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from "jsonwebtoken"
 
-import { JWT_SECRET } from '@repo/backend-common/config';
+// import { JWT_SECRET } from '@repo/backend-common/config';
 
-const middleware = (req: Request, res: Response, next: NextFunction) => {
+
+
+const JWT_SECRET = "jwt_something";
+interface AuthRequest extends Request { 
+    userId?: string;
+}
+const middleware = (req: AuthRequest, res: Response, next: NextFunction) => {
     const token = req.headers["authorization"]?.split(" ")[1];
 
     if (!token) { 
@@ -11,14 +17,17 @@ const middleware = (req: Request, res: Response, next: NextFunction) => {
     }
     try {
         
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
 
-        if (decoded) {
-            req.userId = (decoded as JwtPayload).userId;
+        if (!decoded.userId) {
+            return res.status(401).json({ error: 'Invalid token payload' });
         }
+
+        req.userId = decoded.userId;
+        next();
     } catch (error) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-    next();
+  
 }
 export default middleware;
