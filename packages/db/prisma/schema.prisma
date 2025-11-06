@@ -5,8 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -34,7 +33,6 @@ model Room {
   admin     User     @relation(fields: [adminId], references: [id])
   adminId   String
   events    Event[]
-  
 }
 
 model Event {
