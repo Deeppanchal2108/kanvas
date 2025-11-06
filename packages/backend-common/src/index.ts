@@ -1,1 +1,1 @@
-// export const JWT_SECRET = "jwt_something";
+export const JWT_SECRET = "jwt_something"; //Was required in ws app
