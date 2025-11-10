@@ -33,12 +33,13 @@ model Room {
   admin     User     @relation(fields: [adminId], references: [id])
   adminId   String
   events    Event[]
+  sharedType String @default("public")
+  key  String
 }
 
 model Event {
   id        Int      @id @default(autoincrement())
-  type      String
-  info      Json
+  message    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])

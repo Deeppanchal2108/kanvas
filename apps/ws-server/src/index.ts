@@ -145,9 +145,25 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
 
     
 
-    ws.on("message", (message: string) => {
-        console.log(`Received message: ${message}`);
-        ws.send(`Echo: ${message}`);
+    ws.on("message", async (message: string) => {
+        const data = message.toString();
+        const parsedData = JSON.parse(data);
+        const roomId = parsedData?.roomId;
+
+        if (!roomId) {
+            return;
+        }
+
+        const numericRoomId = parseInt(roomId);
+        if (isNaN(numericRoomId)) {
+            return
+        }
+
+
+
+        if (parsedData.type === "join_room") {
+            
+        }
     });
 });
 console.log("WebSocket server is running on ws://localhost:8080");
