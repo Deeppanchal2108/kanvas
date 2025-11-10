@@ -20,6 +20,9 @@ interface User {
 }
 
 
+let users: User[] = [];
+
+
 type Shape = {
     "type": "rect";
     "x": number;
@@ -93,7 +96,92 @@ function sanitizeString(str: string) {
         .trim();
 }
 
-let users: User[] = [];
+
+function sanitizeShape(shape: Shape) {
+
+    if (shape.type === 'rect') {
+        return {
+            type: "rect",
+            x: sanitizeNumber(shape.x),
+            y: sanitizeNumber(shape.y),
+            width: sanitizeNumber(shape.width),
+            height: sanitizeNumber(shape.height),
+        }
+    } else if (shape.type === 'elip') {
+        return {
+            type: "elip",
+            centerX: sanitizeNumber(shape.centerX),
+            centerY: sanitizeNumber(shape.centerY),
+            radiusX: sanitizeNumber(shape.radiusX),
+            radiusY: sanitizeNumber(shape.radiusY),
+        };
+    } else if (shape.type === "line") {
+        return {
+            type: "line",
+            startX: sanitizeNumber(shape.startX),
+            startY: sanitizeNumber(shape.startY),
+            endX: sanitizeNumber(shape.endX),
+            endY: sanitizeNumber(shape.endY),
+        }
+    } else if (shape.type === "pencil") {
+
+        if (!Array.isArray(shape.pencilCoords)) {
+            return null
+        }
+        // limit the number of points for the dos attack
+        const max = 1000;
+
+        // const shape = {
+        //     type: "pencil",
+        //     pencilCoords: [
+        //         { x: 10, y: 20 },
+        //         { x: 30, y: 40 },
+        //         { x: "invalid", y: 60 },
+        //         null,
+        //         { x: 1000000, y: 500000 },
+        //         { x: 200, y: NaN }
+        //     ]
+        // }
+
+
+        const sanitizedCoordinates = shape.pencilCoords.slice(0, max).map(coord => {
+            if (!coord || typeof coord !== "object") return null
+            return {
+                x: sanitizeNumber(coord.x),
+                y: sanitizeNumber(coord.y)
+            }
+        }).filter(coord => coord !== null)
+
+        return {
+            type: "pencil",
+            pencilCoords: sanitizedCoordinates
+
+        };
+    }
+    else if (shape.type === "text") {
+        return {
+            type: "text",
+            x: sanitizeNumber(shape.x),
+            y: sanitizeNumber(shape.y),
+            width: sanitizeNumber(shape.width),
+            content: sanitizeString(shape.content),
+            nol: sanitizeNumber(shape.nol)
+        }
+    }
+    else if (shape.type === "cursor") {
+        return {
+            type: "cursor"
+        }
+    } else if (shape.type === "grab") {
+        return {
+            type: "grab"
+        }
+    } else {
+        return null;
+    }
+}
+
+
 const wss = new WebSocketServer({
     port: 8080,
     clientTracking: true,
@@ -135,19 +223,19 @@ function checkUser(token: string): string | null {
 
 
 
-function heartbeat(userId : string) {
-    
+function heartbeat(userId: string) {
+
     let user = users.find(u => u.userId === userId);
-   
+
     if (user) {
         if (user.pingTimeout) {
             clearTimeout(user.pingTimeout);
-            
+
         }
 
-      user.pingTimeout=setTimeout(() => {
-        terminateConnection(userId , user.ws ,"ping timeout");
-    }, PING_TIMEOUT);
+        user.pingTimeout = setTimeout(() => {
+            terminateConnection(userId, user.ws, "ping timeout");
+        }, PING_TIMEOUT);
     }
 
 
@@ -161,8 +249,8 @@ function terminateConnection(userId: string, ws: WebSocket, reason: string) {
         //terminating the connection 
         ws.terminate();
     } catch (error) {
-        
-        console.log ( "something went wrong while terminating the connection ")
+
+        console.log("something went wrong while terminating the connection ")
     }
 
 
@@ -175,7 +263,7 @@ function terminateConnection(userId: string, ws: WebSocket, reason: string) {
         }
         users.splice(userIndex, 1);
     }
- }
+}
 
 
 
@@ -205,18 +293,18 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
     ws.on("pong", () => {
         heartbeat(userId)
     })
-    
+
 
     users.push({
 
         userId,
         rooms: [],
         connectionTime: new Date(),
-        ws:ws
-    
+        ws: ws
+
     })
 
-    
+
 
     ws.on("message", async (message: string) => {
         const data = message.toString();
@@ -241,12 +329,12 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
             const sharedKey = parsedData?.sharedKey;
 
             if (!user) {
-                ws.close(3000 ,"user doesnt exists")
+                ws.close(3000, "user doesnt exists")
                 return;
             }
 
             try {
-                
+
                 if (!user.rooms.includes(roomId)) {
 
                     const roomInfo = await prisma.room.findUnique({
@@ -272,22 +360,86 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
                 }
 
             } catch (error) {
-                
+
                 ws.close(1011, "INternal server error ")
             }
-          
+
         }
 
 
-        if (parsedData.type === "leave_room")
-        {
+        if (parsedData.type === "leave_room") {
 
             const currentUser = users.find(user => user.ws === ws);
             if (!currentUser) {
                 return;
             }
 
-            currentUser.rooms=currentUser?.rooms.filter(room => room !==roomId)
+            currentUser.rooms = currentUser?.rooms.filter(room => room !== roomId)
+
+        }
+
+
+        if (parsedData.type === "chat_insert") {
+
+            const user = users.find(user => user.ws === ws);
+            
+            if (!user) {
+                ws.close(4001, "User not found")
+                return;
+            }
+
+            if (!user.rooms.includes(roomId)) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message:"Youu must join the join before sending any messages"
+                }))
+            }
+
+
+            const message = JSON.parse(parsedData?.message);
+            if (!message) {
+                return
+            }
+
+            const sanitizeMsg = sanitizeShape(message);
+
+            if (!sanitizeMsg) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Invalid shape data"
+                }));
+                return;
+            }
+
+            const stringMsg = JSON.stringify(sanitizeMsg);
+
+
+            try {
+
+                const roomChat = await prisma.event.create({
+                    data: {
+                        roomId: numericRoomId,
+                        message
+                            : stringMsg,
+                        
+                        userId: userId
+                    }
+                })
+
+                ws.send(JSON.stringify({
+
+                    type: "self",
+                    chatId: roomChat.id,
+                    message:stringMsg
+                }))
+
+
+                
+            } catch (error) {
+                
+            }
+
+
 
         }
     });
