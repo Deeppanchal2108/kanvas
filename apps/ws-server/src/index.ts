@@ -1,6 +1,8 @@
 import { WebSocketServer } from "ws";
 import type { WebSocket } from "ws";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { prisma } from '@repo/db/client';
+
 // import { JWT_SECRET } from '@repo/backend-common/config';
 
 const JWT_SECRET = "your_jwt_secret_key"; // Replace with your actual secret key
@@ -18,7 +20,78 @@ interface User {
 }
 
 
+type Shape = {
+    "type": "rect";
+    "x": number;
+    "y": number;
+    "width": number;
+    "height": number;
+    "color": string;
+    "strokeWidth": number;
+    "bgColor": string;
+    "lineDashX": number;
+    "lineDashY": number;
+} | {
+    "type": "elip";
+    "centerX": number;
+    "centerY": number;
+    "radiusX": number;
+    "radiusY": number;
+    "color": string;
+    "strokeWidth": number;
+    "bgColor": string;
+    "lineDashX": number;
+    "lineDashY": number;
+} | {
+    "type": "line";
+    "startX": number;
+    "startY": number;
+    "endX": number;
+    "endY": number;
+    "color": string;
+    "strokeWidth": number;
+    "lineDashX": number;
+    "lineDashY": number;
+} | {
+    "type": "pencil";
+    "pencilCoords": Array<{ "x": number, "y": number }>;
+    "color": string;
+    "strokeWidth": number;
+    "lineDashX": number;
+    "lineDashY": number;
+} | {
+    "type": "text";
+    "x": number;
+    "y": number;
+    "width": number;
+    "content": string;
+    "color": string;
+    "nol": number;
+    "strokeWidth": number;
+    "fontSize": number;
+} | {
+    "type": "cursor";
+} | {
+    "type": "grab";
+};
 
+
+// ensures that the number is between some numbers like we can call it sanitizeNumber(50, 0, 100)
+function sanitizeNumber(num: number, min = -Infinity, max = Infinity) {
+    if (typeof num !== 'number' || isNaN(num)) return 0;
+    return Math.max(min, Math.min(max, num));
+}
+
+function sanitizeString(str: string) {
+    if (typeof str !== 'string') return '';
+
+    // Remove potentially dangerous characters and limit length
+    return str
+        .replace(/[<>]/g, '') // Remove HTML tags
+        .replace(/javascript:/gi, '') // Remove javascript: protocol
+        .replace(/on\w+=/gi, '') // Remove event handlers
+        .trim();
+}
 
 let users: User[] = [];
 const wss = new WebSocketServer({
@@ -161,8 +234,61 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
 
 
 
+
         if (parsedData.type === "join_room") {
-            
+
+            const user = users.find(user => user.ws == ws);
+            const sharedKey = parsedData?.sharedKey;
+
+            if (!user) {
+                ws.close(3000 ,"user doesnt exists")
+                return;
+            }
+
+            try {
+                
+                if (!user.rooms.includes(roomId)) {
+
+                    const roomInfo = await prisma.room.findUnique({
+                        where: {
+                            id: Number(roomId)
+                        },
+                        select: {
+                            adminId: true,
+                            sharedType: true,
+                            key: true
+                        }
+                    })
+
+
+
+                    if ((roomInfo?.key === sharedKey && roomInfo?.sharedType === "public") || roomInfo?.adminId === userId) {
+
+                        user.rooms.push(roomId)
+                        return
+
+                    }
+                    ws.close(3000, "unauthorized")
+                }
+
+            } catch (error) {
+                
+                ws.close(1011, "INternal server error ")
+            }
+          
+        }
+
+
+        if (parsedData.type === "leave_room")
+        {
+
+            const currentUser = users.find(user => user.ws === ws);
+            if (!currentUser) {
+                return;
+            }
+
+            currentUser.rooms=currentUser?.rooms.filter(room => room !==roomId)
+
         }
     });
 });

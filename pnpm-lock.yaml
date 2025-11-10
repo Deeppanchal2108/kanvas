@@ -94,6 +94,9 @@ importers:
 
   apps/ws-server:
     dependencies:
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
