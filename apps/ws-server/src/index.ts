@@ -541,7 +541,7 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
                 }));
             }
         }
-        
+
         if (parsedData.type === "chat_delete") {
             try {
                 const currentUser = users.find(x => x.ws === ws);
@@ -593,6 +593,23 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
         }
     
 
+        ws.on('close', () => {
+            //console.log("close");
+            const user = users.find(x => x.ws === ws);
+            if (user && user.pingTimeout) {
+                clearTimeout(user.pingTimeout);
+            }
+            //console.log(users);
+            users = users.filter(x => x.ws !== ws);
+            //console.log(users)
+    
+        });
+
+
+        ws.on('error', (error) => {
+            
+            terminateConnection(userId, ws, 'websocket error');
+        });
     });
 
 
