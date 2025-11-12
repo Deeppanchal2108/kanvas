@@ -1,5 +1,5 @@
 import { WebSocketServer } from "ws";
-import type { WebSocket } from "ws";
+import { WebSocket } from "ws";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { prisma } from '@repo/db/client';
 
@@ -391,7 +391,7 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
             if (!user.rooms.includes(roomId)) {
                 ws.send(JSON.stringify({
                     type: "error",
-                    message:"Youu must join the join before sending any messages"
+                    message: "Youu must join the join before sending any messages"
                 }))
             }
 
@@ -430,18 +430,171 @@ wss.on("connection", (ws: WebSocket, request: Request) => {
 
                     type: "self",
                     chatId: roomChat.id,
-                    message:stringMsg
+                    message: stringMsg
                 }))
 
 
+
+
+                const roomMembers = users.filter(user => user.rooms.includes(roomId) && user.ws.readyState == WebSocket.OPEN && user.userId != userId)
+                
+                const broadCast = JSON.stringify({
+                    type: "chat_insert",
+                    chatId: roomChat.id,
+                    message: stringMsg,
+                    roomId,
+                    timestamp: new Date().toISOString(),
+
+                    
+                })
+
+
+                roomMembers.forEach(user => {
+                    try {
+                        user.ws.send(broadCast)
+                    } catch (e) {
+                        console.log("Something went wrong while broad casting the message ")
+                    }
+                  
+                })
+
                 
             } catch (error) {
-                
+             
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Failed to save your message"
+                }));
             }
 
 
 
         }
+
+        if (parsedData.type === "chat_update") {
+            const currentUser = users.find(x => x.ws === ws);
+            if (!currentUser) {
+                ws.close(4001, "User not found");
+                return;
+            }
+
+            if (!currentUser.rooms.includes(roomId)) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Must join the room before sending messages."
+                }));
+                return;
+            }
+
+            const message = JSON.parse(parsedData?.message);
+            if (!message) {
+                return;
+            }
+
+
+            const sanitizedMessage = sanitizeShape(message);
+
+            if (!sanitizedMessage) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Invalid shape"
+                }));
+                return;
+            }
+
+            const finalMessage = JSON.stringify(sanitizedMessage);
+
+            try {
+                await prisma.event.update({
+                    data: {
+                        message: finalMessage
+                    },
+                    where: {
+                        id: parsedData.chatId
+                    }
+                });
+            
+                const roomMembers = users.filter(user =>
+                    user.rooms.includes(roomId) &&
+                    user.ws.readyState === WebSocket.OPEN && user.userId !== userId
+                );
+
+                const broadcastMessage = JSON.stringify({
+                    type: "chat_update",
+                    message: finalMessage,
+                    chatId: parsedData.chatId,
+                    userId: userId
+                });
+
+                roomMembers.forEach(user => {
+                    try {
+                        user.ws.send(broadcastMessage);
+                    } catch (error) {
+                        console.log("error: " + error);
+                    }
+                });
+
+            } catch (error) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Failed to save your message"
+                }));
+            }
+        }
+        
+        if (parsedData.type === "chat_delete") {
+            try {
+                const currentUser = users.find(x => x.ws === ws);
+                if (!currentUser) {
+                    ws.close(4001, "User not found");
+                    return;
+                }
+
+                if (!currentUser.rooms.includes(roomId)) {
+                    ws.send(JSON.stringify({
+                        type: "error",
+                        message: "Must join the room before sending messages."
+                    }));
+                    return;
+                }
+
+                await prisma.event.delete({
+                    where: {
+                        id: parsedData.chatId
+                    }
+                });
+
+                const roomMembers = users.filter(user =>
+                    user.rooms.includes(roomId) &&
+                    user.ws.readyState === WebSocket.OPEN && user.userId !== userId
+                );
+
+                const broadcastMessage = JSON.stringify({
+                    type: "chat_delete",
+                    chatId: parsedData.chatId,
+                    userId: userId,
+                    roomId: roomId
+                });
+
+                roomMembers.forEach(user => {
+                    try {
+                        user.ws.send(broadcastMessage);
+                    } catch (error) {
+                        console.log("error: " + error);
+                    }
+                });
+
+            } catch (error) {
+                ws.send(JSON.stringify({
+                    type: "error",
+                    message: "Failed to save your message"
+                }));
+            }
+        }
+    
+
     });
+
+
 });
 console.log("WebSocket server is running on ws://localhost:8080");
