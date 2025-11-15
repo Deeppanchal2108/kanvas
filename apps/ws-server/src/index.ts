@@ -5,8 +5,7 @@ import { prisma } from '@repo/db/client';
 
 // import { JWT_SECRET } from '@repo/backend-common/config';
 
-const JWT_SECRET = "your_jwt_secret_key"; // Replace with your actual secret key
-
+const JWT_SECRET = "jwt_secret_hardcoded"; 
 const PING_TIMEOUT = 30000;
 
 

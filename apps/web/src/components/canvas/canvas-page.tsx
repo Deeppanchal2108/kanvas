@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState , useEffect} from 'react'
 interface Props{
     roomId: string,
     publicKey : string
@@ -8,7 +8,7 @@ interface Props{
 function CanvasPage({ roomId, publicKey }: Props) {
   
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const 
+  
   return (
     <div>
           {"here is room id : " + roomId}

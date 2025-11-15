@@ -9,7 +9,7 @@ import { prisma } from '@repo/db/client';
 import { UserSchema, SignInSchema, CreateRoomSchema } from '@repo/common/types';
 
 
-const JWT_SECRET = "jwt_something";
+const JWT_SECRET = "jwt_secret_hardcoded";
 const app = express();
 app.use(express.json());
 app.use(helmet());

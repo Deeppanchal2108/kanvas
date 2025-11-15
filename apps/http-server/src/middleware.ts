@@ -5,7 +5,7 @@ import jwt, { JwtPayload } from "jsonwebtoken"
 
 
 
-const JWT_SECRET = "jwt_something";
+const JWT_SECRET = "jwt_secret_hardcoded";
 interface AuthRequest extends Request { 
     userId?: string;
 }
