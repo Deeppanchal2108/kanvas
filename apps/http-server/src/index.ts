@@ -15,6 +15,14 @@ app.use(express.json());
 app.use(helmet());
 
 
+function generateRandomSecureString(lenght: number):string {
+    const array = new Uint8Array(lenght);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(36))
+        .join("")
+        .substring(0, length);
+}
+
 interface AuthRequest extends Request {
     userId?: string;
 }
@@ -104,7 +112,7 @@ app.post('api/auth/login', async (req, res) => {
 })
 
 
-app.post("api/user/room", middleware, (req, res) => {
+app.post("api/user/room", middleware,async (req, res) => {
     const authreq = req as AuthRequest;
     const result = CreateRoomSchema.safeParse(req.body);
     if (!result.success) {
@@ -115,13 +123,14 @@ app.post("api/user/room", middleware, (req, res) => {
     try {
         const { name } = result.data;
         const userId = authreq.userId!;
-        //TODO isn't this adminID ?
-        // prisma.room.create({
-        //     data: {
-        //         slug: name,
-        //         userId
-        //     }
-        // })
+       
+      await  prisma.room.create({
+            data: {
+                slug: name,
+                adminId: userId,
+                key:generateRandomSecureString(16)
+            }
+        })
         return res.status(200).json({ message: "Room created successfully" })
     }
     catch (error) {
@@ -130,6 +139,92 @@ app.post("api/user/room", middleware, (req, res) => {
 
 
 })
+
+
+app.get("api/user/chat:roomId", middleware, async (req, res) => {
+    const  roomId  = Number(req.params.roomId);
+
+    const authreq = req as AuthRequest;
+    const sharedKey = req.query.sharedKey;
+
+    try {
+
+        const room = await prisma.room.findUnique({
+            where: {
+                id:roomId
+            }, select: {
+                adminId: true,
+                sharedType: true,
+                key:true
+            }
+        })
+
+        if (!room) {
+            return res.status(400).json({
+                message :"Room doesnot exists"
+            })
+        }
+
+        if ((sharedKey === room.key && room.sharedType === "public") || room.adminId === authreq.userId) {
+            
+            const messages = await prisma.event.findMany({
+                where: {
+                    roomId:roomId
+                },
+                orderBy: {
+                    createdAt: "asc",
+                },
+                select: {
+                    id: true,
+                    message: true,
+                },
+                take: 2000,
+            })
+            res.status(200).json({ messages });
+        }
+        else {
+            res.status(403).json({ message: "Unauthorized Access!" });
+        }
+        
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error!" });
+    }
+})
+
+
+app.get("api/user/rooms", middleware, async (req, res) => {
+    const authreq = req as AuthRequest
+    const userId = authreq.userId
+    try {
+        const rooms = await prisma.room.findMany({
+            where: {
+                adminId:userId
+            },
+            select: {
+                sharedType: true,
+                id: true,
+                slug: true,
+                createdAt: true,
+              key:true
+            }
+        })
+
+        if (!rooms) {
+            return res.status(400).json(
+                {
+                message : "no rooms found"
+            }
+            )
+        }
+        return res.status(200).json({rooms:rooms})
+
+    } catch (error) {
+       return res.status(500).json({ message: "Internal Server Error!" });
+    }
+
+    
+})
+
 app.listen(3001, () => {
     console.log('HTTP server is running on http://localhost:3001');
 });
